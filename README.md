@@ -118,6 +118,22 @@ Given a set of points (trees.shp) and a set of polygons (parks.shp) in the same 
 
 Note that features that from parks.shp that don't overlap with trees.shp won't be in the new file.
 
+__Voronoi diagram__
+
+The PostGIS [`ST_VoronojDiagram`](http://www.gaia-gis.it/gaia-sins/spatialite-sql-4.2.0.html#p14c) function is useful for creating voronoi geometries. However, it only creates one multipolygon, which is less useful if one wants to use the attributes of the point geometry. The following creates the Voronoi diagram, breaks up the multipolygob. Then, after adding spatial indices, a spatial join adds the attribute data from the input file to the voronoi polygons:
+
+	ogr2ogr tmp.shp input.shp -f 'ESRI Shapefile' -lco SPATIAL_INDEX=YES \
+	  -dialect sqlite -sql "WITH RECURSIVE cnt(x) AS ( \
+	  SELECT 1 UNION ALL SELECT x+1 FROM cnt \
+	    LIMIT (SELECT NumGeometries(Geometry) FROM geom) \
+	  ), geom AS ( \
+	    SELECT ST_VoronojDiagram(ST_Union(Geometry)) Geometry FROM input \
+	  ) SELECT GeometryN(geom.Geometry, x) Geometry FROM cnt, geom"
+	ogrinfo input.shp -sql "CREATE SPATIAL INDEX ON input"
+	ogr2ogr voronoi.shp . -f 'ESRI Shapefile' -dialect sqlite -sql "SELECT v.Geometry, a.* \
+	  FROM tmp v LEFT JOIN input a ON ST_Contains(v.Geometry, a.Geometry)"
+
+
 Raster operations
 ---
 __Get raster information__
