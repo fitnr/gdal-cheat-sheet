@@ -15,6 +15,18 @@ __Print vector extent__
 
 	ogrinfo input.shp layer-name | grep Extent
 	
+__Get information about a specific feature__
+
+	ogrinfo input.shp -fid 12 -geom=NO
+
+The `geom=NO` flag prevents this command from returning	a well-known text (WKT) representation of the feature's geometry.
+
+__Run an SQLite command on a layer__
+
+	ogrinfo content -dialect sqlite -sql "SELECT COUNT(*) FROM input WHERE type = 'pond'"
+
+This will count "pond" features in `content/input.shp`.
+
 __List vector drivers__
 
 	ogr2ogr --formats
@@ -57,7 +69,8 @@ Add a spatial index:
 
 __Merge features in a vector file by attribute ("dissolve")__
 
-	ogr2ogr -f "ESRI Shapefile" dissolved.shp input.shp -dialect sqlite -sql "select ST_union(Geometry),common_attribute from input GROUP BY common_attribute"
+	ogr2ogr -f "ESRI Shapefile" dissolved.shp input.shp -dialect sqlite \
+	-sql "select ST_union(Geometry) Geometry, common_attribute FROM input GROUP BY common_attribute"
 	
 __Merge features ("dissolve") using a buffer to avoid slivers__
 
@@ -73,17 +86,18 @@ __Extract from a vector file based on query__
 
 To extract features with STATENAME 'New York','New Hampshire', etc. from states.shp
 
-	ogr2ogr -where 'STATENAME like "New%"' states_subset.shp states.shp
+	ogr2ogr states_subset.shp states.shp -where 'STATENAME like "New%"'
 
 To extract type 'pond' from water.shp
 
-	ogr2ogr -where "type = pond" ponds.shp water.shp
+	ogr2ogr ponds.shp water.shp -where "type = 'pond'"
 
 __Subset & filter all shapefiles in a directory__
 
 Assumes that filename and name of layer of interest are the same...  
 
-	basename -s.shp *.shp | xargs -n1 -I % ogr2ogr %-subset.shp %.shp -sql "SELECT field-one, field-two FROM '%' WHERE field-one='value-of-interest'"
+	basename -s.shp *.shp | xargs -n1 -I % ogr2ogr %-subset.shp %.shp \
+		-sql "SELECT field1, field2 FROM '%' WHERE field1 = 'value-of-interest'"
 
 __Extract data from a PostGis database to a GeoJSON file__
 
@@ -100,21 +114,21 @@ __Get the difference between two vector files__
 
 Given two files that both have an id field, this will produce a vector file with the part of `file1.shp` that doesn't intersect with `file2.shp`:
 
-    ogr2ogr diff.shp file1.shp -dialect sqlite \
+    ogr2ogr diff.shp inputfolder -dialect sqlite \
     -sql "SELECT ST_Difference(a.Geometry, b.Geometry) AS Geometry, a.id \
-    FROM file1 a LEFT JOIN 'file2.shp'.file2 b USING (id) WHERE a.Geometry != b.Geometry"
+    FROM file1 a LEFT JOIN file2 b USING (id) WHERE a.Geometry != b.Geometry"
 
-This assumes that `file2.shp` and `file2.shp` are both in the current directory.
+This assumes that `file2.shp` and `file2.shp` are both in `inputfolder`.
 
 __Spatial join:__
 
 A spatial join transfers properties from one vector layer to another based on a [spatial relationship](http://postgis.net/docs/manual-2.0/reference.html#Spatial_Relationships_Measurements) between the features. Fields from the join layer can be [aggregated](https://www.sqlite.org/lang_aggfunc.html) in the output.
 
-Given a set of points (trees.shp) and a set of polygons (parks.shp) in the same directory, create a polygon layer with the geometries from parks.shp and summaries of some columns in trees.shp:
+Given a set of points (`natural/trees.shp`) and a set of polygons (`natural/parks.shp`), create a polygon layer with the geometries from parks.shp and summaries of some columns in trees.shp:
 
-    ogr2ogr -f 'ESRI Shapefile' output.shp parks.shp -dialect sqlite \
+    ogr2ogr -f 'ESRI Shapefile' output.shp natural -dialect sqlite \
     -sql "SELECT p.Geometry, p.id id, SUM(t.field1) field1_sum, AVG(t.field2) field2_avg
-    FROM parks p, 'trees.shp'.trees t WHERE ST_Contains(p.Geometry, t.Geometry) GROUP BY p.id"
+    FROM parks p, trees t WHERE ST_Contains(p.Geometry, t.Geometry) GROUP BY p.id"
 
 Note that features that from parks.shp that don't overlap with trees.shp won't be in the new file.
 
